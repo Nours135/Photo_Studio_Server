@@ -1,0 +1,26 @@
+version: "1.0"
+services:
+  web:
+    build: .
+    network_mode: host
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "18000:18000"
+    env_file: .env
+  redis:
+    image: redis:latest
+    network_mode: host
+    ports:
+      - "6379:6379"
+    env_file: .env
+  db:
+    image: postgres:latest
+    network_mode: host
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d
+      - ./db/data:/var/lib/postgresql
+    env_file: .env
