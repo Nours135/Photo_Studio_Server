@@ -8,13 +8,14 @@ load_dotenv()
 
 # set up api limiters
 from fastapi import FastAPI, Depends, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi_limiter import FastAPILimiter
-from fastapi_limiter.depends import RateLimiter
 import redis.asyncio as aioredis
 
 
 # init logger
-from logger_config import get_logger
+from app.logger_config import get_logger
 logger = get_logger(__name__)
 
 
@@ -32,8 +33,4 @@ app.include_router(main_router)
 async def startup():
     redis = aioredis.from_url(os.getenv("REDIS_URL"), encoding="utf-8", decode_responses=True)
     await FastAPILimiter.init(redis)
-
-
-
-
 

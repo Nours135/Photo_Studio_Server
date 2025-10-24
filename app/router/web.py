@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi_limiter.depends import RateLimiter
+from fastapi import Depends
+
 import os
 
 router = APIRouter()
@@ -22,11 +25,6 @@ async def login_page(request: Request):
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
-
-
-@router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
 
 
 @router.get("/upload", response_class=HTMLResponse)

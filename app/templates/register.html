@@ -138,11 +138,13 @@
                     })
                 });
                 
+                const data = await response.json();
+                
                 if (response.status === 201) {
-                    messageDiv.innerHTML = '<div class="alert alert-success">Account created! Redirecting...</div>';
-                    setTimeout(() => window.location.href = '/login', 1500);
+                    localStorage.setItem('access_token', data.access_token);
+                    messageDiv.innerHTML = '<div class="alert alert-success">Account created! Redirecting to upload page...</div>';
+                    setTimeout(() => window.location.href = '/upload', 1500);
                 } else {
-                    const data = await response.json();
                     messageDiv.innerHTML = `<div class="alert alert-error">${data.detail || 'Registration failed'}</div>`;
                 }
             } catch (error) {

@@ -11,7 +11,7 @@ from app.core.security import (
     create_access_token,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_strict_rate_limiter, get_moderate_rate_limiter
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 from app.logger_config import get_logger
 logger = get_logger(__name__)
 
-@router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED, dependencies=[get_strict_rate_limiter()])
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     logger.info(f"Registration attempt for email: {user_in.email}")
     
@@ -30,15 +30,21 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-        
-    # import pdb; pdb.set_trace()
+    
     password_hash = get_password_hash(user_in.password)
     user = user_crud.create_user(db, user_in, password_hash)
     logger.info(f"User successfully created: {user.email} (ID: {user.id})")
-    return user
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id)},
+        expires_delta=access_token_expires
+    )
+    
+    return TokenResponse(access_token=access_token)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[get_strict_rate_limiter()])
 def login(user_login: UserLogin, db: Session = Depends(get_db)):
     logger.info(f"Login attempt for email: {user_login.email}")
     
@@ -71,7 +77,7 @@ def login(user_login: UserLogin, db: Session = Depends(get_db)):
     return TokenResponse(access_token=access_token)
 
 
-@router.get("/me", response_model=User)
+@router.get("/me", response_model=User, dependencies=[get_moderate_rate_limiter()])
 def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
 

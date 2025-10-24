@@ -3,6 +3,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from uuid import UUID
 
+from fastapi_limiter.depends import RateLimiter
+
 from app.database import get_db
 from app.core.security import decode_access_token
 from app.crud import user as user_crud
@@ -40,3 +42,14 @@ def get_current_user(
         raise credentials_exception
     
     return user
+
+
+strict_rate_limiter = RateLimiter(times=5, seconds=300)
+moderate_rate_limiter = RateLimiter(times=10, seconds=600)
+
+
+def get_strict_rate_limiter():
+    return Depends(strict_rate_limiter)
+
+def get_moderate_rate_limiter():
+    return Depends(moderate_rate_limiter)

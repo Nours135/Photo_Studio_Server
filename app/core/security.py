@@ -43,14 +43,3 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
-
-
-if __name__ == "__main__":
-    # add test for password hashing
-    from dotenv import load_dotenv
-    load_dotenv()
-    SECRET_KEY = os.getenv("SECRET_KEY")
-    password = "password123"
-    import pdb; pdb.set_trace()
-    hashed_password = get_password_hash(password)
-    print(hashed_password)
