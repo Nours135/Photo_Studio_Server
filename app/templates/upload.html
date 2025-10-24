@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload - AI Photo Studio</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+        .header {
+            background: white;
+            padding: 16px 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 20px;
+            color: #333;
+        }
+        .header button {
+            padding: 8px 16px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 32px auto;
+            padding: 0 20px;
+        }
+        .upload-section {
+            background: white;
+            padding: 32px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 48px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #4a90e2;
+            background: #f8f9fa;
+        }
+        .upload-area.dragover {
+            border-color: #4a90e2;
+            background: #e8f4fd;
+        }
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .preview-section {
+            margin-top: 24px;
+            display: none;
+        }
+        .preview-section.active {
+            display: block;
+        }
+        .preview-image {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .task-selector {
+            margin: 24px 0;
+        }
+        .task-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .task-option {
+            padding: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .task-option:hover {
+            border-color: #4a90e2;
+        }
+        .task-option.selected {
+            border-color: #4a90e2;
+            background: #e8f4fd;
+        }
+        .task-option input[type="radio"] {
+            display: none;
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 12px;
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+        .submit-btn:hover {
+            background: #357abd;
+        }
+        .submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        .alert-success {
+            background: #efe;
+            color: #3c3;
+        }
+        .alert-error {
+            background: #fee;
+            color: #c33;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 AI Photo Studio</h1>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <div class="container">
+        <div class="upload-section">
+            <h2>Upload Image</h2>
+            <div id="message"></div>
+            
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon">📷</div>
+                <p>Click to upload or drag and drop</p>
+                <p style="color: #888; font-size: 14px; margin-top: 8px;">PNG, JPG, WEBP up to 10MB</p>
+            </div>
+            
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+
+            <div class="preview-section" id="previewSection">
+                <img id="previewImage" class="preview-image" alt="Preview">
+                
+                <div class="task-selector">
+                    <h3>Select Processing Task</h3>
+                    <div class="task-options">
+                        <label class="task-option">
+                            <input type="radio" name="task" value="background_removal" checked>
+                            <div>
+                                <strong>Background Removal</strong>
+                                <p style="font-size: 13px; color: #666; margin-top: 4px;">Remove image background</p>
+                            </div>
+                        </label>
+                        <label class="task-option">
+                            <input type="radio" name="task" value="style_transfer">
+                            <div>
+                                <strong>Style Transfer</strong>
+                                <p style="font-size: 13px; color: #666; margin-top: 4px;">Apply artistic styles</p>
+                            </div>
+                        </label>
+                        <label class="task-option">
+                            <input type="radio" name="task" value="enhancement">
+                            <div>
+                                <strong>Enhancement</strong>
+                                <p style="font-size: 13px; color: #666; margin-top: 4px;">Enhance image quality</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <button class="submit-btn" id="submitBtn" onclick="submitTask()">
+                    <span id="btnText">Process Image</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+
+        const uploadArea = document.getElementById('uploadArea');
+        const previewSection = document.getElementById('previewSection');
+        const previewImage = document.getElementById('previewImage');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('Please select an image file', 'error');
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                showMessage('File size must be less than 10MB', 'error');
+                return;
+            }
+
+            selectedFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                previewSection.classList.add('active');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        document.querySelectorAll('.task-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.task-option').forEach(o => o.classList.remove('selected'));
+                this.classList.add('selected');
+                this.querySelector('input[type="radio"]').checked = true;
+            });
+        });
+
+        document.querySelector('.task-option').classList.add('selected');
+
+        async function submitTask() {
+            if (!selectedFile) {
+                showMessage('Please select an image first', 'error');
+                return;
+            }
+
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const taskType = document.querySelector('input[name="task"]:checked').value;
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+
+            submitBtn.disabled = true;
+            btnText.innerHTML = '<span class="loading"></span> Processing...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+
+                const uploadResponse = await fetch('/api/upload/', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (!uploadResponse.ok) {
+                    throw new Error('Upload failed');
+                }
+
+                const uploadData = await uploadResponse.json();
+                
+                const payload = await fetch('/api/auth/me', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                }).then(r => r.json());
+
+                const taskResponse = await fetch(`/api/tasks?user_id=${payload.id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        task_type: taskType,
+                        input_image_s3_key: uploadData.file_path,
+                        parameters: {}
+                    })
+                });
+
+                if (taskResponse.ok) {
+                    const task = await taskResponse.json();
+                    showMessage('Task created successfully! ID: ' + task.id, 'success');
+                    setTimeout(() => {
+                        selectedFile = null;
+                        previewSection.classList.remove('active');
+                        document.getElementById('fileInput').value = '';
+                    }, 2000);
+                } else {
+                    throw new Error('Task creation failed');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                btnText.textContent = 'Process Image';
+            }
+        }
+
+        function showMessage(text, type) {
+            const message = document.getElementById('message');
+            message.innerHTML = `<div class="alert alert-${type}">${text}</div>`;
+            setTimeout(() => {
+                message.innerHTML = '';
+            }, 5000);
+        }
+
+        function logout() {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+        }
+
+        window.onload = () => {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                window.location.href = '/login';
+            }
+        };
+    </script>
+</body>
+</html>
+
