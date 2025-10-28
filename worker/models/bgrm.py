@@ -1,0 +1,124 @@
+# background removal model
+
+import os
+from symbol import pass_stmt
+import torch
+from typing import Any
+from torchvision import transforms
+from skimage import io
+
+from app.logger_config import get_logger
+
+from worker.models.u2net.u2net import U2NET, U2NETP
+from worker.models.u2net.transform import normPRED, RescaleT, ToTensorLab, save_output
+from worker.models.base import BaseModel
+from app.core.queue import QueueTaskPayload
+
+# ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+logger = get_logger(__name__)
+
+
+class BackgroundRemovalModel(BaseModel):
+    def __init__(self, model_name: str = 'u2netp'):
+        super().__init__()
+        assert model_name in ['u2net', 'u2netp'], "Invalid model name"
+        self._model_name = model_name
+        self._model_dir = os.path.join(os.environ['ROOT_DIR'], './worker/models/u2net', 'saved_models', self._model_name, self._model_name + '.pth')
+
+        self._model_transform = transforms.Compose([
+            RescaleT(320),
+            ToTensorLab(flag=0),
+        ])
+
+    def _use_cuda(self) -> bool:
+        return torch.cuda.is_available() and self.config['MODEL_DEVICE'] == 'cuda'
+
+    async def _inference(self, task: QueueTaskPayload) -> Any:   # do not implement batch processing here
+        await self._lazy_load_model()
+        # import pdb; pdb.set_trace()
+        # preprocess the input image
+        if self.config['ENV'] == 'local':
+            task_path = task.input_image_local_path
+        elif self.config['ENV'] == 'GPU':
+            raise NotImplementedError("Not implemented")
+            # task_path = task.input_image_s3_key
+            # TODO: download the image from S3
+        else:
+            raise ValueError(f"Invalid environment: {self.config['ENV']}")
+
+        input_image = io.imread(task_path)
+        input_image = self._model_transform({'image': input_image})['image']
+
+        input_image = input_image.type(torch.FloatTensor)
+
+        if self._use_cuda():
+            input_image = input_image.to(self.config['MODEL_DEVICE'])
+        # else:
+        #     input_image = input_image.to('cpu')
+
+        # inference
+        # import pdb; pdb.set_trace()  
+        input_image = input_image.unsqueeze(0)  # add batch dimension
+        d1,d2,d3,d4,d5,d6,d7 = self._model(input_image)
+
+        pred = d1[:,0,:,:]
+        pred = normPRED(pred)
+
+        # postprocess the output
+        await save_output(os.path.join(os.getenv("UPLOAD_DIR"), task.input_image_local_path), pred)
+
+
+    async def _lazy_load_model(self):   # need IO, so async
+        if self._is_loaded and self._model is not None:
+            return
+        
+        if(self._model_name=='u2net'):
+            logger.info("...load U2NET---173.6 MB")
+            net = U2NET(3,1)
+        elif(self._model_name=='u2netp'):
+            logger.info("...load U2NEP---4.7 MB")
+            net = U2NETP(3,1)
+
+        if self._use_cuda():
+            net.load_state_dict(torch.load(self._model_dir))
+            net.to(self.config['MODEL_DEVICE'])
+        else:
+            net.load_state_dict(torch.load(self._model_dir, map_location='cpu'))
+        net.eval()  # set model to evaluation mode
+
+        self._model = net
+        self._is_loaded = True
+
+    def _unload_model(self):
+        if self._model is not None:
+            del self._model
+            self._model = None
+            self._is_loaded = False
+
+
+# if __name__ == '__main__':
+    # do a test for background removal
+    # copy these to the worker/main.py file
+    # then run python -m worker.main
+
+
+    # import os
+    # os.environ['ROOT_DIR'] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # # print(os.environ['ROOT_DIR'])
+    # # import pdb; pdb.set_trace()
+
+    # async def test_bgrm():
+    #     from app.core.queue import QueueTaskPayload
+    #     import uuid
+
+    #     bgrm = BackgroundRemovalModel()
+    #     bgrm.start()
+    #     return await bgrm._inference(QueueTaskPayload(
+    #         task_id=uuid.uuid4(),
+    #         task_type='background_removal',
+    #         user_id=uuid.uuid4(),
+    #         input_image_local_path='./uploads/horse.jpg',
+    #         input_image_s3_key='horse.jpg',
+    #     ))
+
+    # asyncio.run(test_bgrm())
