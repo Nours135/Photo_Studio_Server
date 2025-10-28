@@ -34,6 +34,7 @@ class ProcessingTaskBase(BaseModel):
 
 
 class ProcessingTaskCreate(ProcessingTaskBase):
+    id: UUID
     input_image_s3_key: str
 
 

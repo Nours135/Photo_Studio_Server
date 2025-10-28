@@ -9,6 +9,8 @@ from app.database import get_db
 from app.core.security import decode_access_token
 from app.crud import user as user_crud
 from app.models import User
+from app.core.queue import BaseTaskQueueService, RedisTaskQueueService  
+
 
 security = HTTPBearer()
 
@@ -53,3 +55,27 @@ def get_strict_rate_limiter():
 
 def get_moderate_rate_limiter():
     return Depends(moderate_rate_limiter)
+
+
+_queue_service: BaseTaskQueueService = None  # Type hint to base class
+
+
+async def get_queue_service() -> BaseTaskQueueService:  # Return base class
+    """
+    Returns task queue service. 
+    Implementation can be switched via QUEUE_IMPL env var.
+    Supported: redis (default), sqs
+    """
+    global _queue_service
+    
+    if _queue_service is None:
+        queue_impl = os.getenv("QUEUE_IMPL", "redis").lower()
+        
+        if queue_impl == "redis":
+            _queue_service = RedisTaskQueueService()
+        # elif queue_impl == "sqs":
+        #     _queue_service = SQSTaskQueueService(...)
+        else:
+            raise ValueError(f"Unsupported queue implementation: {queue_impl}")
+    
+    return _queue_service

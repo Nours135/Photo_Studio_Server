@@ -296,8 +296,10 @@
             try {
                 const formData = new FormData();
                 formData.append('file', selectedFile);
+                formData.append('task_type', taskType);
+                formData.append('parameters', JSON.stringify({}));
 
-                const uploadResponse = await fetch('/api/upload/', {
+                const response = await fetch('/api/tasks/create', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -305,40 +307,20 @@
                     body: formData
                 });
 
-                if (!uploadResponse.ok) {
-                    throw new Error('Upload failed');
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || 'Task creation failed');
                 }
 
-                const uploadData = await uploadResponse.json();
+                const task = await response.json();
+                showMessage('Task created successfully! ID: ' + task.id, 'success');
                 
-                const payload = await fetch('/api/auth/me', {
-                    headers: {'Authorization': `Bearer ${token}`}
-                }).then(r => r.json());
-
-                const taskResponse = await fetch(`/api/tasks?user_id=${payload.id}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        task_type: taskType,
-                        input_image_s3_key: uploadData.file_path,
-                        parameters: {}
-                    })
-                });
-
-                if (taskResponse.ok) {
-                    const task = await taskResponse.json();
-                    showMessage('Task created successfully! ID: ' + task.id, 'success');
-                    setTimeout(() => {
-                        selectedFile = null;
-                        previewSection.classList.remove('active');
-                        document.getElementById('fileInput').value = '';
-                    }, 2000);
-                } else {
-                    throw new Error('Task creation failed');
-                }
+                setTimeout(() => {
+                    selectedFile = null;
+                    previewSection.classList.remove('active');
+                    document.getElementById('fileInput').value = '';
+                }, 2000);
+                
             } catch (error) {
                 showMessage('Error: ' + error.message, 'error');
             } finally {

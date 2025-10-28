@@ -2,11 +2,13 @@
 ## can be implemented as Redis queue or SQS queue
 from pydantic import BaseModel
 from uuid import UUID
+import os 
 from datetime import datetime
-import redis.asyncio as aioredis
 from typing import Any
-import json
+from app.core.redis import RedisClient
+from app.logger_config import get_logger
 
+logger = get_logger(__name__)
 
 
 # ========================== Task class ==========================
@@ -37,8 +39,8 @@ class BaseTaskQueueService:
 
 class RedisTaskQueueService(BaseTaskQueueService):
     '''Redis-based queue service for pending tasks'''
-    def __init__(self, redis_client: aioredis.Redis):
-        self.redis = redis_client
+    def __init__(self):
+        self.redis = RedisClient.get_client(db=os.getenv("REDIS_QUEUE_DB", 0))  # use db 0 for queue
 
     async def enqueue(self, task_payload: QueueTaskPayload) -> bool:
         serialized = task_payload.model_dump_json()  # 已经是 JSON 字符串，不需要 json.dumps
