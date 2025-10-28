@@ -1,6 +1,6 @@
 # queue to manage background tasks
 ## can be implemented as Redis queue or SQS queue
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from uuid import UUID
 import os 
 from datetime import datetime
@@ -19,7 +19,7 @@ class QueueTaskPayload(BaseModel):  # similar to dataclass but with pydantic
     input_image_s3_key: str
     input_image_local_path: str
     parameters: dict | None = None
-    created_at: datetime
+    created_at: datetime = Field(default_factory=datetime.now) 
 
 
 # ========================== Redis-based queue service ==========================
@@ -40,13 +40,20 @@ class BaseTaskQueueService:
 class RedisTaskQueueService(BaseTaskQueueService):
     '''Redis-based queue service for pending tasks'''
     def __init__(self):
-        self.redis = RedisClient.get_client(db=os.getenv("REDIS_QUEUE_DB", 0))  # use db 0 for queue
+        self.redis = None
+
+    async def _init_redis(self):
+        self.redis = await RedisClient.get_client(db=int(os.getenv("REDIS_QUEUE_DB", 0)))  # use db 0 for queue
 
     async def enqueue(self, task_payload: QueueTaskPayload) -> bool:
-        serialized = task_payload.model_dump_json()  # 已经是 JSON 字符串，不需要 json.dumps
+        if self.redis is None:
+            await self._init_redis()
+        serialized = task_payload.model_dump_json()  
         return await self.redis.lpush(self.QUEUE_NAME, serialized)
     
     async def dequeue(self) -> QueueTaskPayload:
+        if self.redis is None:
+            await self._init_redis()
         serialized = await self.redis.rpop(self.QUEUE_NAME)
         if serialized:
             return QueueTaskPayload.model_validate_json(serialized)

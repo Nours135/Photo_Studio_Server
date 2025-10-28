@@ -3,13 +3,11 @@ from typing import Optional
 import os
 
 class RedisClient:
-    def __init__(self):
-        self._client: Optional[aioredis.Redis] = None
-        
-        self._redis_host = os.getenv("REDIS_HOST", "localhost")
-        self._redis_port = int(os.getenv("REDIS_PORT", 6379))
-        self._redis_password = os.getenv("REDIS_PASSWORD", None)
-
+    _client: Optional[aioredis.Redis] = None
+    _redis_host: str = os.getenv("REDIS_HOST", "localhost")
+    _redis_port: int = int(os.getenv("REDIS_PORT", 6379))
+    _redis_password: str = os.getenv("REDIS_PASSWORD", None)
+    
     @classmethod
     async def get_client(cls, db: int = 0) -> aioredis.Redis:
         if cls._client is None:

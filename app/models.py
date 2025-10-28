@@ -15,7 +15,7 @@ class SubscriptionTier(str, enum.Enum):
 
 class TaskStatus(str, enum.Enum):
     PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
+    PROCESSING = "PROCESSING"  # use this as intermediate status when preview is generated
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
@@ -49,6 +49,7 @@ class ProcessingTask(Base):
     )
     
     input_image_s3_key = Column(Text, nullable=False)
+    preview_local_path = Column(Text)
     output_image_s3_key = Column(Text)
     
     parameters = Column(JSONB)
