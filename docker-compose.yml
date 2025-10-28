@@ -8,7 +8,11 @@ services:
       - redis
     ports:
       - "18000:18000"
+    volumes:
+      - ./logs:/logs  
     env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1 
   redis:
     image: redis:latest
     network_mode: host

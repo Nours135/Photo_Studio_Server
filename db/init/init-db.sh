@@ -39,4 +39,5 @@ if [ -f /docker-entrypoint-initdb.d/schema.sql ]; then
     echo "Applying schema.sql as $APP_USER..."
     psql -v ON_ERROR_STOP=1 --username "$APP_USER" --dbname "$APP_DB" -f /docker-entrypoint-initdb.d/schema.sql
 else
-    echo "⚠️  Warning: schema.sql
+    echo "⚠️  Warning: schema.sql not found"
+fi

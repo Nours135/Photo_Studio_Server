@@ -4,3 +4,13 @@ python-dotenv
 jinja2
 fastapi-limiter
 redis
+sqlalchemy
+psycopg2-binary
+pydantic
+python-multipart
+aiofiles
+argon2-cffi
+boto3
+aioboto3
+Pillow
+websockets
