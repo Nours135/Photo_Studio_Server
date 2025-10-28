@@ -1,20 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from uuid import UUID
-from app.models import User
-from typing import Optional
+from app.models import User, TaskStatus
+from typing import Optional, List
 import os
 import uuid
 import aiofiles
+import asyncio
 import json
 
 from app.database import get_db
 from app.schemas import ProcessingTaskCreate, ProcessingTask, ProcessingTaskUpdate
 from app.crud import task as task_crud
-from app.core.dependencies import get_strict_rate_limiter, get_moderate_rate_limiter, get_current_user
+from app.core.dependencies import get_strict_rate_limiter, get_moderate_rate_limiter, get_current_user, get_current_user_from_query
 from app.logger_config import get_logger
 from app.core.queue import BaseTaskQueueService, QueueTaskPayload
 from app.core.dependencies import get_queue_service
+
 
 logger = get_logger(__name__)
 
@@ -29,7 +32,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 
 @router.post("/create", response_model=ProcessingTask, status_code=status.HTTP_201_CREATED, dependencies=[get_strict_rate_limiter()])
 async def create_task(
-    file: UploadFile = File(..., max_length=MAX_FILE_SIZE),
+    file: UploadFile = File(...),
     task_type: str = Form(...),
     parameters: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
@@ -109,10 +112,33 @@ async def create_task(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Task creation failed: {str(e)}")
+        logger.error(f"Task creation failed: {str(e)}", exc_info=True)
         if 'file_path' in locals() and os.path.exists(file_path):
             os.remove(file_path)
         raise HTTPException(status_code=500, detail="Task creation failed")
 
 
+# get task by task id
+@router.get("/{task_id}", response_model=ProcessingTask, status_code=status.HTTP_200_OK)
+async def get_task(
+    task_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    task_queue: BaseTaskQueueService = Depends(get_queue_service)
+):
+    task = task_crud.get_task(db, task_id)
+    if task is None or task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+# get task by user id
+@router.get("/my-tasks", response_model=List[ProcessingTask], status_code=status.HTTP_200_OK)
+async def get_tasks_by_user(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tasks = task_crud.get_tasks_by_user(db, user_id=current_user.id)
+    if tasks is None or len(tasks) == 0:
+        raise HTTPException(status_code=404, detail="Tasks not found")
+    return tasks
 

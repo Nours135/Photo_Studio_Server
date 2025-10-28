@@ -1,7 +1,9 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from uuid import UUID
+from typing import Optional
+import os
 
 from fastapi_limiter.depends import RateLimiter
 
@@ -26,6 +28,36 @@ def get_current_user(
     )
     
     token = credentials.credentials
+    payload = decode_access_token(token)
+    
+    if payload is None:
+        raise credentials_exception
+    
+    user_id: str = payload.get("sub")
+    if user_id is None:
+        raise credentials_exception
+    
+    try:
+        user = user_crud.get_user(db, UUID(user_id))
+    except ValueError:
+        raise credentials_exception
+    
+    if user is None:
+        raise credentials_exception
+    
+    return user
+
+
+def get_current_user_from_query(
+    token: str = Query(..., description="JWT token for authentication"),
+    db: Session = Depends(get_db)
+) -> User:
+    """Get current user from query parameter token (for SSE)"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+    )
+    
     payload = decode_access_token(token)
     
     if payload is None:
