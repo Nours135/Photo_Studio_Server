@@ -154,6 +154,80 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        .results-section {
+            display: none;
+            margin-top: 32px;
+        }
+        .results-section.active {
+            display: block;
+        }
+        .result-container {
+            background: white;
+            padding: 32px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+        .result-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .result-item img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .result-label {
+            padding: 12px;
+            background: #f8f9fa;
+            font-weight: 600;
+            text-align: center;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        .status-pending {
+            background: #ffeaa7;
+            color: #856404;
+        }
+        .status-processing {
+            background: #74b9ff;
+            color: #004085;
+        }
+        .status-completed {
+            background: #55efc4;
+            color: #155724;
+        }
+        .status-failed {
+            background: #ff7675;
+            color: #721c24;
+        }
+        .download-btn {
+            margin-top: 16px;
+            padding: 12px 24px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .download-btn:hover {
+            background: #229954;
+        }
     </style>
 </head>
 <body>
@@ -208,6 +282,36 @@
                 <button class="submit-btn" id="submitBtn" onclick="submitTask()">
                     <span id="btnText">Process Image</span>
                 </button>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <div class="result-container">
+                <h2>
+                    Processing Results
+                    <span class="status-badge" id="statusBadge"></span>
+                </h2>
+                
+                <div class="result-grid">
+                    <!-- Preview Result -->
+                    <div class="result-item" id="previewResult" style="display: none;">
+                        <div class="result-label">Preview (Quick Result)</div>
+                        <img id="previewResultImage" alt="Preview Result">
+                    </div>
+                    
+                    <!-- Final Result -->
+                    <div class="result-item" id="finalResult" style="display: none;">
+                        <div class="result-label">Final Result</div>
+                        <img id="finalResultImage" alt="Final Result">
+                    </div>
+                </div>
+                
+                <div style="text-align: center;">
+                    <button id="downloadBtn" class="download-btn" style="display: none;">
+                        Download Final Result
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -274,6 +378,8 @@
 
         document.querySelector('.task-option').classList.add('selected');
 
+        let currentEventSource = null;
+
         async function submitTask() {
             if (!selectedFile) {
                 showMessage('Please select an image first', 'error');
@@ -313,20 +419,169 @@
                 }
 
                 const task = await response.json();
-                showMessage('Task created successfully! ID: ' + task.id, 'success');
+                showMessage('Task created successfully! Waiting for results...', 'success');
                 
-                setTimeout(() => {
-                    selectedFile = null;
-                    previewSection.classList.remove('active');
-                    document.getElementById('fileInput').value = '';
-                }, 2000);
+                // Show results section and start SSE
+                document.getElementById('resultsSection').classList.add('active');
+                subscribeToTaskUpdates(task.id);
                 
             } catch (error) {
                 showMessage('Error: ' + error.message, 'error');
-            } finally {
                 submitBtn.disabled = false;
                 btnText.textContent = 'Process Image';
             }
+        }
+
+        function subscribeToTaskUpdates(taskId) {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                showMessage('Authentication required', 'error');
+                return;
+            }
+
+            // Close existing connection if any
+            if (currentEventSource) {
+                currentEventSource.close();
+            }
+
+            const eventSource = new EventSource(`/api/tasks/${taskId}/stream?token=${token}`);
+            currentEventSource = eventSource;
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.error) {
+                        console.error('SSE Error:', data.error);
+                        showMessage('Error: ' + data.error, 'error');
+                        eventSource.close();
+                        resetUploadForm();
+                        return;
+                    }
+
+                    console.log('Task update:', data);
+                    
+                    // Update status badge
+                    updateStatusBadge(data.status);
+
+                    // Handle preview ready
+                    if (data.preview_ready && data.preview_url) {
+                        console.log('Preview ready:', data.preview_url);
+                        document.getElementById('previewResult').style.display = 'block';
+                        loadProtectedImage(data.preview_url, 'previewResultImage');
+                        showMessage('Preview ready! 🎉', 'success');
+                    }
+
+                    // Handle final result ready
+                    if (data.output_ready && data.output_url) {
+                        console.log('Final result ready:', data.output_url);
+                        document.getElementById('finalResult').style.display = 'block';
+                        loadProtectedImage(data.output_url, 'finalResultImage');
+                        setupDownloadButton(data.output_url);
+                        showMessage('Processing completed! ✨', 'success');
+                    }
+
+                    // Close connection when task is completed or failed
+                    if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+                        console.log('Task finished, closing SSE connection');
+                        eventSource.close();
+                        resetUploadForm();
+                    }
+
+                } catch (error) {
+                    console.error('Error parsing SSE data:', error);
+                    showMessage('Error processing update', 'error');
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE connection error:', error);
+                showMessage('Connection error. Please refresh the page.', 'error');
+                eventSource.close();
+                resetUploadForm();
+            };
+
+            // Clean up on page unload
+            window.addEventListener('beforeunload', () => {
+                if (eventSource) {
+                    eventSource.close();
+                }
+            });
+        }
+
+        function updateStatusBadge(status) {
+            const badge = document.getElementById('statusBadge');
+            badge.textContent = status;
+            badge.className = 'status-badge status-' + status.toLowerCase();
+        }
+
+        async function loadProtectedImage(url, imgElementId) {
+            const token = localStorage.getItem('access_token');
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load image');
+                }
+                
+                const blob = await response.blob();
+                const objectURL = URL.createObjectURL(blob);
+                document.getElementById(imgElementId).src = objectURL;
+            } catch (error) {
+                console.error('Error loading image:', error);
+                showMessage('Failed to load image', 'error');
+            }
+        }
+
+        function setupDownloadButton(url) {
+            const downloadBtn = document.getElementById('downloadBtn');
+            downloadBtn.style.display = 'inline-block';
+            
+            downloadBtn.onclick = async (e) => {
+                e.preventDefault();
+                const token = localStorage.getItem('access_token');
+                
+                try {
+                    const response = await fetch(url, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Download failed');
+                    }
+                    
+                    const blob = await response.blob();
+                    const downloadUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = 'processed_image.jpg';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(downloadUrl);
+                } catch (error) {
+                    console.error('Download error:', error);
+                    showMessage('Download failed', 'error');
+                }
+            };
+        }
+
+        function resetUploadForm() {
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            submitBtn.disabled = false;
+            btnText.textContent = 'Process Image';
+            
+            // Reset form
+            selectedFile = null;
+            document.getElementById('previewSection').classList.remove('active');
+            document.getElementById('fileInput').value = '';
         }
 
         function showMessage(text, type) {

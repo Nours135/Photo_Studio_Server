@@ -1,31 +1,35 @@
 from __future__ import annotations  # for type hints
 import asyncio
 from typing import Dict, Type, Any, List
-from collections import defaultdict
-from datetime import datetime
+import os
+import json
+
+
+
+
 from worker.db.queue_client import QueueClient
+from worker.db.db_client import DBClient
+from worker.db.notification_client import NotificationClient
 from worker.models.base import BaseModel
 from app.logger_config import get_logger
 from app.core.queue import QueueTaskPayload
-
+from worker.worker_config import get_worker_config, get_output_path
 
 logger = get_logger(__name__)
-
 
 class ModelOrchestrator:
     """
     Central manager for all models, handles task dispatching and statistics
     """
     def __init__(self):
+        self.config = get_worker_config()
         self._queue_client = QueueClient()
+        self._notification_client = NotificationClient()
+        self._db_client = DBClient()
         self.models: Dict[str, BaseModel] = {}  # name to instance 
         self.model_classes: Dict[str, Type[BaseModel]] = {}   # name to class
-        self._running = False
+        self._running = False        
         self._background_tasks = []
-        
-        # Statistics
-        # self.stats = dict()  # model class name to stats
-        # stats stored in lower level model wrapper class: BaseModel
     
     def register_model(self, model_type: str, model_class: Type[BaseModel]):
         '''
@@ -93,9 +97,11 @@ class ModelOrchestrator:
                                     await self._process_task(t) 
                                 except Exception as e:
                                     logger.error(f"Task failed: {e}", exc_info=True)
-                        
+
+                        logger.info(f"ModelOrchestrator: processing task: {task}")
                         task_coro = asyncio.create_task(process_with_semaphore(task))
                         active_tasks.add(task_coro)
+                        task_coro.add_done_callback(lambda f: self._handle_task_completion(f, task))
                         task_coro.add_done_callback(active_tasks.discard)
                         
                 except Exception as e:
@@ -142,6 +148,63 @@ class ModelOrchestrator:
         '''
         return {model_type: model.stats for model_type, model in self.models.items()}
 
+    def _handle_task_completion(self, task_future: asyncio.Future, task: QueueTaskPayload):
+        '''
+        Handle the task completion:
+            (1) Check if the task is successful
+            (2) Notify the task completion for frontend
+            (3) database update
+        '''
+        # Step 1: check if the task is successful
+         
+        if self.config['ENV'] == 'local':
+            # check local path
+            output_local_path = get_output_path(task.input_image_local_path)
+            output_path = os.path.join(os.path.expanduser(os.getenv("ROOT_DIR")), os.getenv("UPLOAD_DIR"), output_local_path)
+            logger.info(f"task_id: {task.task_id}, ModelOrchestrator: output_path: {output_path}")
+            if os.path.exists(output_path): # successful
+                # update database
+                TASK_STATUS = 'PROCESSING'  # preview is generated, but not completed
+                PREVIEW_LOCAL_PATH = output_local_path
+            else:
+                # update database
+                TASK_STATUS = 'FAILED'
+                PREVIEW_LOCAL_PATH = 'N/A'
+            FINAL_OUTPUT_PATH = 'N/A'
+        else:
+            raise NotImplementedError("Not implemented")
+            # TASK_STATUS = 'COMPLETED'
+            # PREVIEW_LOCAL_PATH = output_local_path
+            # FINAL_OUTPUT_PATH = 'N/A'
+            # TODO: download the image from S3
+            # output_path = get_output_path(task.input_image_s3_key)
+            
+        # Step 2: notify the task completion for frontend by redis pub/sub
+        message = {
+            'status': TASK_STATUS,
+            'preview_local_path': PREVIEW_LOCAL_PATH,
+            'final_output_path': FINAL_OUTPUT_PATH
+        }
+        asyncio.create_task(
+            self._notification_client.notify_task_status(str(task.task_id), message=json.dumps(message))
+        )  # non-blocking
+        logger.info(f"task_id: {task.task_id}, ModelOrchestrator: notified task completion for frontend, message: {message}")
 
+        
+        # Step 3: update to database, necessary for frontend to show the preview
+        if TASK_STATUS == 'PROCESSING':
+            if self.config['ENV'] == 'local':
+                updated_fields = {
+                    'todb_status': 'PROCESSING',
+                    'preview_local_path': PREVIEW_LOCAL_PATH
+                }
+            else:
+                raise NotImplementedError("Not implemented")
+        
+            asyncio.create_task(
+                self._db_client.update_task_status(task.task_id, updated_fields)
+            )  # non-blocking
 
-    # TODO: add redis alert for task completion and failure
+            logger.info(f"task_id: {task.task_id}, ModelOrchestrator: updated database, updated_fields: {updated_fields}")
+        elif TASK_STATUS == 'COMPLETED':
+            raise NotImplementedError("Not implemented")
