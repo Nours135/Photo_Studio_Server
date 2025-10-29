@@ -39,8 +39,9 @@ class BaseTaskQueueService:
 
 class RedisTaskQueueService(BaseTaskQueueService):
     '''Redis-based queue service for pending tasks'''
-    def __init__(self):
+    def __init__(self, timeout: float = 60.0):
         self.redis = None
+        self.timeout = timeout
 
     async def _init_redis(self):
         self.redis = await RedisClient.get_client(db=int(os.getenv("REDIS_QUEUE_DB", 0)))  # use db 0 for queue
@@ -54,7 +55,8 @@ class RedisTaskQueueService(BaseTaskQueueService):
     async def dequeue(self) -> QueueTaskPayload:
         if self.redis is None:
             await self._init_redis()
-        serialized = await self.redis.rpop(self.QUEUE_NAME)
-        if serialized:
+        result = await self.redis.brpop(self.QUEUE_NAME, timeout=self.timeout)
+        if result:
+            _, serialized = result  # brpop returns (key, value)
             return QueueTaskPayload.model_validate_json(serialized)
         return None
