@@ -15,6 +15,7 @@ def create_task(
     model_version: Optional[str] = None
 ) -> ProcessingTask:
     db_task = ProcessingTask(
+        id=task.id,
         user_id=user_id,
         task_type=task.task_type,
         status=TaskStatus.PENDING,
