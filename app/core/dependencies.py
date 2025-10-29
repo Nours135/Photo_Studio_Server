@@ -78,8 +78,8 @@ def get_current_user_from_query(
     return user
 
 
-strict_rate_limiter = RateLimiter(times=5, seconds=300)
-moderate_rate_limiter = RateLimiter(times=10, seconds=600)
+strict_rate_limiter = RateLimiter(times=20, seconds=300)
+moderate_rate_limiter = RateLimiter(times=50, seconds=300)
 
 
 def get_strict_rate_limiter():
