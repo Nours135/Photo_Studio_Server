@@ -1,7 +1,6 @@
 # background removal model
 
 import os
-from symbol import pass_stmt
 import torch
 from typing import Any
 from torchvision import transforms
@@ -19,11 +18,11 @@ logger = get_logger(__name__)
 
 
 class BackgroundRemovalModel(BaseModel):
-    def __init__(self, model_name: str = 'u2netp'):
+    def __init__(self, model_name: str = 'u2net'):
         super().__init__()
         assert model_name in ['u2net', 'u2netp'], "Invalid model name"
         self._model_name = model_name
-        self._model_dir = os.path.join(os.environ['ROOT_DIR'], './worker/models/u2net', 'saved_models', self._model_name, self._model_name + '.pth')
+        self._model_dir = os.path.join(os.path.expanduser(os.environ['ROOT_DIR']), './worker/models/u2net', 'saved_models', self._model_name, self._model_name + '.pth')
 
         self._model_transform = transforms.Compose([
             RescaleT(320),
@@ -46,7 +45,10 @@ class BackgroundRemovalModel(BaseModel):
         else:
             raise ValueError(f"Invalid environment: {self.config['ENV']}")
 
-        input_image = io.imread(task_path)
+        logger.info(f"task_id: {task.task_id}, BackgroundRemovalModel: task_path: {task_path}")
+        # import pdb; pdb.set_trace()
+
+        input_image = io.imread(os.path.join(os.getenv("UPLOAD_DIR"), task_path))
         input_image = self._model_transform({'image': input_image})['image']
 
         input_image = input_image.type(torch.FloatTensor)
@@ -65,7 +67,8 @@ class BackgroundRemovalModel(BaseModel):
         pred = normPRED(pred)
 
         # postprocess the output
-        await save_output(os.path.join(os.getenv("UPLOAD_DIR"), task.input_image_local_path), pred)
+        logger.info(f'task_id: {task.task_id}, BackgroundRemovalModel: saving output...')
+        await save_output(task.input_image_local_path, pred)
 
 
     async def _lazy_load_model(self):   # need IO, so async
