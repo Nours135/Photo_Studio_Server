@@ -57,14 +57,14 @@ class BaseModel:
         async with self._model_lock:
             if not self._is_loaded:
                 await self._lazy_load_model()  
-                self.stats['total_tasks_processed'] += 1
-                start_time = asyncio.get_event_loop().time()
-                result = await self._inference(task)  # inference method to be implemented in subclass
-                end_time = asyncio.get_event_loop().time()
-                self.stats['total_inference_time'].append(end_time - start_time)
-                self.stats['total_successed'] += 1
-                self._last_used_time = end_time
-                return result
+            self.stats['total_tasks_processed'] += 1
+            start_time = asyncio.get_event_loop().time()
+            result = await self._inference(task)  # inference method to be implemented in subclass
+            end_time = asyncio.get_event_loop().time()
+            self.stats['total_inference_time'].append(end_time - start_time)
+            self.stats['total_successed'] += 1
+            self._last_used_time = end_time
+            return result
             
 
     async def _inference(self, input: Any) -> Any:
@@ -79,10 +79,9 @@ class BaseModel:
     async def start_idle_detection(self):
         while self._running:
             try:
+                idle_time = asyncio.get_event_loop().time() - self._last_used_time
                 async with self._model_lock:  # lock to protect the model from being used and unloaded at the same time
                     if self._is_loaded and self._model is not None:
-                        idle_time = asyncio.get_event_loop().time() - self._last_used_time
-                        
                         if idle_time > self._keep_alive_seconds:
                             logger.info(f"Unloading idle model")
                             self._unload_model()
