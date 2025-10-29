@@ -1,6 +1,6 @@
 # queue client to retirve tasks from queue
 
-from app.core.queue import BaseQueueClient, RedisTaskQueueService, QueueTaskPayload
+from app.core.queue import RedisTaskQueueService, BaseTaskQueueService, QueueTaskPayload
 from app.logger_config import get_logger
 from worker.worker_config import get_worker_config
 
@@ -8,7 +8,7 @@ config = get_worker_config()
 logger = get_logger(__name__)
 
 
-def get_queue_client(config) -> BaseQueueClient:
+def get_queue_client(config) -> BaseTaskQueueService:
     if config['ENV'] == 'local':
         return RedisTaskQueueService()
     else:

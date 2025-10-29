@@ -1,6 +1,6 @@
-from torchvision import transforms
 from skimage import io, transform, color
 import numpy as np
+import os
 import torch
 from PIL import Image
 
@@ -129,7 +129,7 @@ def normPRED(d):
 
 async def save_output(image_path, pred):
 	# load image
-    original_image = io.imread(image_path)
+    original_image = io.imread(os.path.join(os.getenv("UPLOAD_DIR"), image_path))
 
 	# load pred
     pred = pred.squeeze()
@@ -155,4 +155,4 @@ async def save_output(image_path, pred):
     # # suffix = aaa[-1]
     # output_path = '.'.join(aaa[:-1]) + '.output' + '.png'
     output_path = get_output_path(image_path)
-    result_image.save(output_path)
+    result_image.save(os.path.join(os.getenv("UPLOAD_DIR"), output_path))

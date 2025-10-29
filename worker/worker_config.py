@@ -7,7 +7,7 @@ def get_worker_config() -> dict:
     if os.getenv("ENV") == "local":  # local worker
         return {
             "RESIZE_IMAGE": True,
-            "RESIZE_IMAGE_SIZE": (512, 512),
+            "RESIZE_IMAGE_SIZE": (512, 512),  # some models need to resize the image to be able to run on CPU
             "MODEL_DEVICE": "cpu",
             "ENV": "local"
         }
@@ -19,3 +19,10 @@ def get_worker_config() -> dict:
         }
     else:
         raise ValueError(f"Invalid environment: {os.getenv('ENV')}")
+
+
+def get_output_path(image_path: str) -> str:
+    aaa = image_path.split(".")  # 
+    # suffix = aaa[-1]
+    output_path = '.'.join(aaa[:-1]) + '.output' + '.png'
+    return output_path
