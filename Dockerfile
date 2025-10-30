@@ -20,4 +20,4 @@ RUN pip install -r app/requirements.txt
 
 EXPOSE 18001
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "18001", "--reload", "--log-level", "debug", "--access-log"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug", "--access-log"]

@@ -2,3 +2,5 @@
 logs/
 *.pyc
 uploads/*
+*.pth
+.DS_Store
