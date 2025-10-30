@@ -26,4 +26,7 @@ class QueueClient:
 
     async def get_task(self) -> QueueTaskPayload:
         return await self.queue_client.dequeue()
+    
+    async def enqueue_retry(self, task: QueueTaskPayload):
+        return await self.queue_client.enqueue(task)
 

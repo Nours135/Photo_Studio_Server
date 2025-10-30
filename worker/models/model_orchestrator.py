@@ -96,7 +96,8 @@ class ModelOrchestrator:
                                 try:
                                     await self._process_task(t) 
                                 except Exception as e:
-                                    logger.error(f"Task failed: {e}", exc_info=True)
+                                    logger.error(f"Task failed: {e}, retrying...", exc_info=True)
+                                    await self._queue_client.enqueue_retry(t)  # 
 
                         logger.info(f"ModelOrchestrator: processing task: {task}")
                         task_coro = asyncio.create_task(process_with_semaphore(task))
