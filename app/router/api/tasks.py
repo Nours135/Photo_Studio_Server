@@ -116,8 +116,30 @@ async def create_task(
         raise HTTPException(status_code=500, detail="Task creation failed")
 
 
+# get task by user id
+@router.get("/all-tasks", response_model=List[ProcessingTask], status_code=status.HTTP_200_OK, dependencies=[get_strict_rate_limiter()])
+async def get_tasks_by_user(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        logger.info(f"get_tasks_by_user: user_id: {current_user.id}")
+        tasks = task_crud.get_tasks_by_user(db, user_id=current_user.id)
+        if tasks is None or len(tasks) == 0:
+            raise HTTPException(status_code=404, detail="No tasks found")
+        logger.info(f"get_tasks_by_user: user_id: {current_user.id}, task count: {len(tasks)}")
+        return tasks
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_tasks_by_user failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
 # get task by task id
-@router.get("/{task_id}", response_model=ProcessingTask, status_code=status.HTTP_200_OK)
+@router.get("/{task_id}", response_model=ProcessingTask, status_code=status.HTTP_200_OK, dependencies=[get_strict_rate_limiter()])
 async def get_task(
     task_id: UUID,
     current_user: User = Depends(get_current_user),
@@ -128,18 +150,6 @@ async def get_task(
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
-# get task by user id
-@router.get("/my-tasks", response_model=List[ProcessingTask], status_code=status.HTTP_200_OK)
-async def get_tasks_by_user(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    tasks = task_crud.get_tasks_by_user(db, user_id=current_user.id)
-    if tasks is None or len(tasks) == 0:
-        raise HTTPException(status_code=404, detail="Tasks not found")
-    return tasks
-
-
 def generate_preview_url(task_id: UUID, filename: str):
     return f"/api/images/preview/{task_id}/{filename}"
 
@@ -149,7 +159,7 @@ def generate_output_url(task_id: UUID, filename: str):
 
 # use Redis Pub/Sub to mobnitor task progress
 # use Server-Sent Events (SSE) to stream task progress
-@router.get("/{task_id}/stream")
+@router.get("/{task_id}/stream", dependencies=[get_strict_rate_limiter()])
 async def stream_task_status(
     task_id: UUID,
     current_user: User = Depends(get_current_user_from_query),
