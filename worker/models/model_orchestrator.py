@@ -13,7 +13,8 @@ from worker.db.notification_client import NotificationClient
 from worker.models.base import BaseModel
 from app.logger_config import get_logger
 from app.core.queue import QueueTaskPayload
-from worker.worker_config import get_worker_config, get_output_path
+from worker.worker_config import get_worker_config
+from app.core.storage import LocalStorage, S3Storage
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,9 @@ class ModelOrchestrator:
         self.model_classes: Dict[str, Type[BaseModel]] = {}   # name to class
         self._running = False        
         self._background_tasks = []
+
+        self.storage_service = LocalStorage()
+        self.storage_service_s3 = S3Storage()
     
     def register_model(self, model_type: str, model_class: Type[BaseModel]):
         '''
@@ -156,56 +160,51 @@ class ModelOrchestrator:
             (2) Notify the task completion for frontend
             (3) database update
         '''
+        # Create async task for post-processing
+        asyncio.create_task(self._process_task_completion(task))
+    
+    async def _process_task_completion(self, task: QueueTaskPayload):
+        '''Async handler for task completion'''
         # Step 1: check if the task is successful
-         
-        if self.config['ENV'] == 'local':
-            # check local path
-            output_local_path = get_output_path(task.input_image_local_path)
-            output_path = os.path.join(os.path.expanduser(os.getenv("ROOT_DIR")), os.getenv("UPLOAD_DIR"), output_local_path)
-            logger.info(f"task_id: {task.task_id}, ModelOrchestrator: output_path: {output_path}")
-            if os.path.exists(output_path): # successful
-                # update database
-                TASK_STATUS = 'PROCESSING'  # preview is generated, but not completed
-                PREVIEW_LOCAL_PATH = output_local_path
-            else:
-                # update database
-                TASK_STATUS = 'FAILED'
-                PREVIEW_LOCAL_PATH = 'N/A'
-            FINAL_OUTPUT_PATH = 'N/A'
+        output_id = LocalStorage.get_output_id(task.input_image_s3_key)  # Use static method
+        output_ready_locally = await self.storage_service.exists(output_id)
+        output_ready_s3 = await self.storage_service_s3.exists(output_id)
+
+        if output_ready_s3:
+            TASK_STATUS = 'COMPLETED'
+        elif output_ready_locally:
+            TASK_STATUS = 'PROCESSING'
         else:
-            raise NotImplementedError("Not implemented")
-            # TASK_STATUS = 'COMPLETED'
-            # PREVIEW_LOCAL_PATH = output_local_path
-            # FINAL_OUTPUT_PATH = 'N/A'
-            # TODO: download the image from S3
-            # output_path = get_output_path(task.input_image_s3_key)
-            
+            TASK_STATUS = 'FAILED'
+
         # Step 2: notify the task completion for frontend by redis pub/sub
         message = {
             'status': TASK_STATUS,
-            'preview_local_path': PREVIEW_LOCAL_PATH,
-            'final_output_path': FINAL_OUTPUT_PATH
+            'file_id': task.input_image_s3_key
         }
+
         asyncio.create_task(
             self._notification_client.notify_task_status(str(task.task_id), message=json.dumps(message))
         )  # non-blocking
         logger.info(f"task_id: {task.task_id}, ModelOrchestrator: notified task completion for frontend, message: {message}")
 
         
-        # Step 3: update to database, necessary for frontend to show the preview
+        # Step 3: update to database
         if TASK_STATUS == 'PROCESSING':
-            if self.config['ENV'] == 'local':
-                updated_fields = {
-                    'todb_status': 'PROCESSING',
-                    'preview_local_path': PREVIEW_LOCAL_PATH
-                }
-            else:
-                raise NotImplementedError("Not implemented")
-        
-            asyncio.create_task(
-                self._db_client.update_task_status(task.task_id, updated_fields)
-            )  # non-blocking
-
-            logger.info(f"task_id: {task.task_id}, ModelOrchestrator: updated database, updated_fields: {updated_fields}")
+            updated_fields = {
+                'todb_status': 'PROCESSING'
+            }
         elif TASK_STATUS == 'COMPLETED':
-            raise NotImplementedError("Not implemented")
+            updated_fields = {
+                'todb_status': 'COMPLETED',
+            }
+        elif TASK_STATUS == 'FAILED':
+            updated_fields = {
+                'todb_status': 'FAILED'
+            }
+        
+        if updated_fields:
+            asyncio.create_task(
+                self._db_client.update_task_status(task.task_id, changed_fields=updated_fields)
+            )  # non-blocking
+            logger.info(f"task_id: {task.task_id}, ModelOrchestrator: updated database, updated_fields: {updated_fields}")

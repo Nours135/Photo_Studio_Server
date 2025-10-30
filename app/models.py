@@ -48,9 +48,8 @@ class ProcessingTask(Base):
         index=True
     )
     
+    # Storage: All paths inferred from input_image_s3_key
     input_image_s3_key = Column(Text, nullable=False)
-    preview_local_path = Column(Text)
-    output_image_s3_key = Column(Text)
     
     parameters = Column(JSONB)
     

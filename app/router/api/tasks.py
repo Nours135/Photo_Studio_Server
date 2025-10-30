@@ -16,8 +16,9 @@ from app.crud import task as task_crud
 from app.core.dependencies import get_strict_rate_limiter, get_moderate_rate_limiter, get_current_user, get_current_user_from_query
 from app.logger_config import get_logger
 from app.core.queue import BaseTaskQueueService, QueueTaskPayload
-from app.core.dependencies import get_queue_service
+from app.core.dependencies import get_queue_service, get_storage_service
 from app.core.redis import RedisClient
+from app.core.storage import StorageService
 
 logger = get_logger(__name__)
 
@@ -37,11 +38,13 @@ async def create_task(
     parameters: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    task_queue: BaseTaskQueueService = Depends(get_queue_service)  # Inject here
+    task_queue: BaseTaskQueueService = Depends(get_queue_service),
+    storage_service: StorageService = Depends(get_storage_service)
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
-    
+    logger.info(f"TEST: create_task: file: {file.filename}")
+
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -59,14 +62,11 @@ async def create_task(
                 detail=f"File too large. Max size: {MAX_FILE_SIZE // (1024*1024)}MB"
             )
         
-        file_id = str(uuid.uuid4())
-        file_name = f"{file_id}{file_ext}"
-        file_path = file_name
+        file_id = f"{str(uuid.uuid4())}{file_ext}"
         
-        async with aiofiles.open(os.path.join(os.path.expanduser(os.getenv("ROOT_DIR")), os.getenv("UPLOAD_DIR"), file_path), 'wb') as f:
-            await f.write(content)
+        await storage_service.save(file_id, content)
         
-        logger.info(f"File uploaded: {file_name} by user {current_user.email}")
+        logger.info(f"File uploaded: {file_id} by user {current_user.email}")
         
         
         if parameters:
@@ -77,8 +77,6 @@ async def create_task(
         else:
             params_dict = None
         # step 2: store file in S3
-        # TODO: implement S3 storage
-        # considering not upload to S3 immediately, maybe later when local worker is processing the preview results
 
         task_id = uuid.uuid4()
         # step 3: enqueue task to Redis queue
@@ -86,8 +84,7 @@ async def create_task(
             task_id=task_id,
             task_type=task_type,
             user_id=current_user.id,
-            input_image_s3_key=file_name,
-            input_image_local_path=file_path,
+            input_image_s3_key=file_id,  # All other paths inferred from this
             parameters=params_dict
         )
 
@@ -97,7 +94,7 @@ async def create_task(
         task_in = ProcessingTaskCreate(
             id=task_id,
             task_type=task_type,
-            input_image_s3_key=file_name,
+            input_image_s3_key=file_id,
             parameters=params_dict
         )
         task = task_crud.create_task(
@@ -154,8 +151,7 @@ def generate_preview_url(task_id: UUID, filename: str):
     return f"/api/images/preview/{task_id}/{filename}"
 
 def generate_output_url(task_id: UUID, filename: str):
-    # return f"/api/images/output/{task_id}/{filename}"
-    raise NotImplementedError("Not implemented")
+    return f"/api/images/output/{task_id}/{filename}"
 
 # use Redis Pub/Sub to mobnitor task progress
 # use Server-Sent Events (SSE) to stream task progress
@@ -202,14 +198,14 @@ async def stream_task_status(
                     if message_data['status'] == 'COMPLETED':
                         response_data['status'] = 'COMPLETED'
                         response_data['preview_ready'] = True
-                        response_data['preview_url'] = generate_preview_url(task_id, message_data['preview_local_path'])
+                        response_data['preview_url'] = generate_preview_url(task_id, message_data['file_id'])
                         response_data['output_ready'] = True
-                        response_data['output_url'] = generate_output_url(task_id, message_data['final_output_path'])
+                        response_data['output_url'] = generate_output_url(task_id, message_data['file_id'])
                     
                     elif message_data['status'] == 'PROCESSING':
                         response_data['status'] = 'PROCESSING'
                         response_data['preview_ready'] = True
-                        response_data['preview_url'] = generate_preview_url(task_id, message_data['preview_local_path'])
+                        response_data['preview_url'] = generate_preview_url(task_id, message_data['file_id'])
 
                     elif message_data['status'] == 'FAILED':
                         response_data['status'] = 'FAILED'

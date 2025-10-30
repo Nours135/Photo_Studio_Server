@@ -23,10 +23,8 @@ CREATE TABLE processing_tasks (
     task_type VARCHAR(50) NOT NULL, -- 'background_removal', 'style_transfer', etc.
     status task_status_type NOT NULL, 
     
-    -- input and output
+    -- Storage: All paths inferred from input_image_s3_key
     input_image_s3_key TEXT NOT NULL,
-    output_image_s3_key TEXT,
-    preview_local_path TEXT,
     
     -- parameters
     parameters JSONB, -- store all processing parameters for reproducibility

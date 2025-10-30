@@ -12,7 +12,7 @@ from app.core.security import decode_access_token
 from app.crud import user as user_crud
 from app.models import User
 from app.core.queue import BaseTaskQueueService, RedisTaskQueueService  
-
+from app.core.storage import StorageService, LocalStorage, S3Storage
 
 security = HTTPBearer()
 
@@ -111,3 +111,27 @@ async def get_queue_service() -> BaseTaskQueueService:  # Return base class
             raise ValueError(f"Unsupported queue implementation: {queue_impl}")
     
     return _queue_service
+
+
+
+_storage_service: StorageService = None  # Type hint to base class
+
+async def get_storage_service(storage_type: Optional[str] = None) -> StorageService:
+    global _storage_service
+    if storage_type is None:
+        storage_type = os.getenv("STORAGE_TYPE", "local").lower()
+    
+    if _storage_service is None:        
+        if storage_type == "local":
+            _storage_service = LocalStorage()
+        elif storage_type == "s3":
+            _storage_service = S3Storage()
+        else:
+            raise ValueError(f"Unsupported storage type: {storage_type}")
+    
+    return _storage_service
+
+
+async def get_s3_storage_service() -> StorageService:
+    """Get S3 storage service"""
+    return await get_storage_service(storage_type="s3")

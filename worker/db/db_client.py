@@ -24,17 +24,16 @@ class DBClient:
         Update the task status in the database
         '''
         db = next(get_db())
-        # TODO: should add validation for changed_fields
-        task_update = ProcessingTaskUpdate()
-        if 'todb_status' in changed_fields:
-            task_update.status = TaskStatus(changed_fields['todb_status'].upper())
+        try:
+            # TODO: should add validation for changed_fields
+            task_update = ProcessingTaskUpdate()
+            if 'todb_status' in changed_fields:
+                task_update.status = TaskStatus(changed_fields['todb_status'].upper())
 
-        if 'preview_local_path' in changed_fields:
-            task_update.preview_local_path = changed_fields['preview_local_path']
-
-        if 'output_image_s3_key' in changed_fields:
-            task_update.output_image_s3_key = changed_fields['output_image_s3_key']
-            task_update.completed_at = datetime.now()
-            
-        task_crud.update_task(db, task_id, task_update)
-        
+            # preview_local_path and output_image_s3_key removed - paths are now inferred from input_image_s3_ke
+            if changed_fields['todb_status'] == 'COMPLETED':
+                task_update.completed_at = datetime.now()
+                
+            task_crud.update_task(db, task_id, task_update)
+        finally:
+            db.close()

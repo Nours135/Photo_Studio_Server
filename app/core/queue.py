@@ -16,8 +16,7 @@ class QueueTaskPayload(BaseModel):  # similar to dataclass but with pydantic
     task_id: UUID
     task_type: str
     user_id: UUID
-    input_image_s3_key: str
-    input_image_local_path: str
+    input_image_s3_key: str  # All paths can be inferred from this key
     parameters: dict | None = None
     created_at: datetime = Field(default_factory=datetime.now) 
 

@@ -12,7 +12,7 @@ from worker.models.u2net.u2net import U2NET, U2NETP
 from worker.models.u2net.transform import normPRED, RescaleT, ToTensorLab, save_output
 from worker.models.base import BaseModel
 from app.core.queue import QueueTaskPayload
-
+from app.core.storage import LocalStorage, S3Storage
 # ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 logger = get_logger(__name__)
 
@@ -29,6 +29,9 @@ class BackgroundRemovalModel(BaseModel):
             ToTensorLab(flag=0),
         ])
 
+        self.storage_service = LocalStorage()  
+        self.storage_service_s3 = S3Storage()
+
     def _use_cuda(self) -> bool:
         return torch.cuda.is_available() and self.config['MODEL_DEVICE'] == 'cuda'
 
@@ -37,7 +40,7 @@ class BackgroundRemovalModel(BaseModel):
         # import pdb; pdb.set_trace()
         # preprocess the input image
         if self.config['ENV'] == 'local':
-            task_path = task.input_image_local_path
+            task_path = task.input_image_s3_key
         elif self.config['ENV'] == 'GPU':
             raise NotImplementedError("Not implemented")
             # task_path = task.input_image_s3_key
@@ -47,8 +50,8 @@ class BackgroundRemovalModel(BaseModel):
 
         logger.info(f"task_id: {task.task_id}, BackgroundRemovalModel: task_path: {task_path}")
         # import pdb; pdb.set_trace()
-
-        input_image = io.imread(os.path.join(os.getenv("UPLOAD_DIR"), task_path))
+        input_image_path = self.storage_service.get_local_file_path(task_path)
+        input_image = io.imread(input_image_path)
         input_image = self._model_transform({'image': input_image})['image']
 
         input_image = input_image.type(torch.FloatTensor)
@@ -62,13 +65,19 @@ class BackgroundRemovalModel(BaseModel):
         # import pdb; pdb.set_trace()  
         input_image = input_image.unsqueeze(0)  # add batch dimension
         d1,d2,d3,d4,d5,d6,d7 = self._model(input_image)
-
+        del input_image, d2,d3,d4,d5,d6,d7
+        
         pred = d1[:,0,:,:]
         pred = normPRED(pred)
 
         # postprocess the output
         logger.info(f'task_id: {task.task_id}, BackgroundRemovalModel: saving output...')
-        await save_output(task.input_image_local_path, pred)
+        output_id = LocalStorage.get_output_id(task_path)  # Use static method
+        output_image_path = self.storage_service.get_local_file_path(output_id)
+        
+        await save_output(input_image_path, pred, output_image_path)  # save to local
+        output_img_content = await self.storage_service.read(output_id)  # Use file_id not path
+        await self.storage_service_s3.save(output_id, output_img_content)  # save to s3
 
 
     async def _lazy_load_model(self):   # need IO, so async

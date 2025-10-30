@@ -302,12 +302,6 @@
                         <div class="result-label">Preview (Quick Result)</div>
                         <img id="previewResultImage" alt="Preview Result">
                     </div>
-                    
-                    <!-- Final Result -->
-                    <div class="result-item" id="finalResult" style="display: none;">
-                        <div class="result-label">Final Result</div>
-                        <img id="finalResultImage" alt="Final Result">
-                    </div>
                 </div>
                 
                 <div style="text-align: center;">
@@ -478,8 +472,6 @@
                     // Handle final result ready
                     if (data.output_ready && data.output_url) {
                         console.log('Final result ready:', data.output_url);
-                        document.getElementById('finalResult').style.display = 'block';
-                        loadProtectedImage(data.output_url, 'finalResultImage');
                         setupDownloadButton(data.output_url);
                         showMessage('Processing completed! ✨', 'success');
                     }

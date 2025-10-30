@@ -40,8 +40,6 @@ class ProcessingTaskCreate(ProcessingTaskBase):
 
 class ProcessingTaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
-    preview_local_path: Optional[str] = None
-    output_image_s3_key: Optional[str] = None
     processing_time_ms: Optional[int] = None
     completed_at: Optional[datetime] = None
 
@@ -50,9 +48,7 @@ class ProcessingTask(ProcessingTaskBase):
     id: UUID
     user_id: UUID
     status: TaskStatus
-    input_image_s3_key: str
-    preview_local_path: Optional[str] = None
-    output_image_s3_key: Optional[str] = None
+    input_image_s3_key: str  # All paths inferred from this
     processing_time_ms: Optional[int] = None
     model_version: Optional[str] = None
     created_at: datetime

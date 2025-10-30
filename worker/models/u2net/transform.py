@@ -4,9 +4,6 @@ import os
 import torch
 from PIL import Image
 
-
-from worker.worker_config import get_output_path
-
 #==========================dataset load==========================
 class RescaleT(object):
 
@@ -127,9 +124,9 @@ def normPRED(d):
     return dn
 
 
-async def save_output(image_path, pred):
+async def save_output(original_image_path, pred, output_image_path):
 	# load image
-    original_image = io.imread(os.path.join(os.getenv("UPLOAD_DIR"), image_path))
+    original_image = io.imread(original_image_path)
 
 	# load pred
     pred = pred.squeeze()
@@ -154,5 +151,4 @@ async def save_output(image_path, pred):
     # aaa = image_path.split(".")  # 
     # # suffix = aaa[-1]
     # output_path = '.'.join(aaa[:-1]) + '.output' + '.png'
-    output_path = get_output_path(image_path)
-    result_image.save(os.path.join(os.getenv("UPLOAD_DIR"), output_path))
+    result_image.save(output_image_path)

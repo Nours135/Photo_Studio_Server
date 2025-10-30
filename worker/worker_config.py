@@ -21,8 +21,3 @@ def get_worker_config() -> dict:
         raise ValueError(f"Invalid environment: {os.getenv('ENV')}")
 
 
-def get_output_path(image_path: str) -> str:
-    aaa = image_path.split(".")  # 
-    # suffix = aaa[-1]
-    output_path = '.'.join(aaa[:-1]) + '.output' + '.png'
-    return output_path
