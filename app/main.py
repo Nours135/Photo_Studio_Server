@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from fastapi_limiter import FastAPILimiter
 import redis.asyncio as aioredis
 
+from app.monitoring import MetricsMiddleware
 
 load_dotenv()
 
@@ -32,6 +33,7 @@ class TraceIdMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI()
 app.add_middleware(TraceIdMiddleware)
+app.add_middleware(MetricsMiddleware)
 
 
 # include routers

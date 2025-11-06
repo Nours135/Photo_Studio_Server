@@ -28,3 +28,16 @@ services:
       - ./db/init:/docker-entrypoint-initdb.d
       - ./db/data:/var/lib/postgresql
     env_file: .env
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    container_name: prometheus
+
+  pushgateway:
+    image: prom/pushgateway
+    ports:
+      - "9091:9091"
+    container_name: pushgateway

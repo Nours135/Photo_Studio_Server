@@ -14,3 +14,4 @@ boto3
 aioboto3
 Pillow
 websockets
+prometheus_client
