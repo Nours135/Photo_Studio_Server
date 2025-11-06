@@ -4,7 +4,7 @@ AI Photo Studio is a scalable, production-ready image processing service powered
 
 ## Demo
 
-Demo link: [http://18.191.20.249/](http://18.191.20.249/)
+Demo link: [http://3.16.188.226/](http://3.16.188.226/)
 
 ## Architecture Overview
 
