@@ -1,26 +1,37 @@
 
 import json
 import os
-# load env
 from dotenv import load_dotenv
-load_dotenv()
-
-
-# set up api limiters
+import uuid
 from fastapi import FastAPI, Depends, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.responses import Response
 from fastapi_limiter import FastAPILimiter
 import redis.asyncio as aioredis
 
 
+load_dotenv()
+
+
 # init logger
-from app.logger_config import get_logger
+from app.logger_config import get_logger, set_trace_id, clear_trace_id
 logger = get_logger(__name__)
 
 
-# set up fastapi app
+class TraceIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        trace_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        set_trace_id(trace_id)
+        try:
+            response: Response = await call_next(request)
+            response.headers["X-Request-ID"] = trace_id
+            return response
+        finally:
+            clear_trace_id()
+
+
 app = FastAPI()
+app.add_middleware(TraceIdMiddleware)
 
 
 # include routers

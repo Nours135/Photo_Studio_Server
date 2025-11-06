@@ -88,5 +88,5 @@ class BaseModel:
         
                 await asyncio.sleep(self._keep_alive_seconds - idle_time + 1) 
             except Exception as e:
-                logger.error(f"Idle detection error: {e}", exc_info=True)
+                logger.error(f"Idle detection error: {e}", exc_info=True, stack_info=True)
                 await asyncio.sleep(self._keep_alive_seconds - idle_time + 1)

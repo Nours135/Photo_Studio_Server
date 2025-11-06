@@ -24,18 +24,21 @@ async def get_preview_image(
     db: Session = Depends(get_db),
     storage_service: StorageService = Depends(get_storage_service)
 ):
-    logger.info(f"get_preview_image: task_id: {task_id}, filename: {filename}")
+    logger.info("get_preview_image", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
     # Security: prevent path traversal
     if ".." in filename or "/" in filename:
+        logger.warning("Invalid filename", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
         raise HTTPException(status_code=400, detail="Invalid filename")
     
     # Verify task ownership
     # import pdb; pdb.set_trace()
     task = task_crud.get_task(db, task_id)
     if not task:
+        logger.warning("Task not found", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
         raise HTTPException(status_code=404, detail="Task not found")
     
     if task.user_id != current_user.id or filename != task.input_image_s3_key:
+        logger.warning("User access to file denied", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Infer preview/output filename from input_image_s3_key
@@ -44,6 +47,7 @@ async def get_preview_image(
     # logger.info(f"get_preview_image: preview_content: {len(preview_content)} bytes")
 
     if not preview_content:
+        logger.warning("Preview image not found", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
         raise HTTPException(status_code=404, detail="Preview image not found")
     
     return Response(content=preview_content, media_type="image/png")
@@ -56,18 +60,21 @@ async def get_output_image(
     db: Session = Depends(get_db),
     storage_service: StorageService = Depends(get_s3_storage_service)
 ):
-    logger.info(f"get_output_image: task_id: {task_id}, filename: {filename}")
+    logger.info("get_output_image", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
 
     # Security: prevent path traversal
     if ".." in filename or "/" in filename:
+        logger.warning("Invalid filename", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     # Verify task ownership
     task = task_crud.get_task(db, task_id)
     if not task:
+        logger.warning("Task not found", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
         raise HTTPException(status_code=404, detail="Task not found")
     
     if task.user_id != current_user.id or filename != task.input_image_s3_key:
+        logger.warning("User access to file denied", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Infer output filename from input_image_s3_key
@@ -76,8 +83,7 @@ async def get_output_image(
     output_content = await storage_service.read(output_id)
     # logger.info(f"get_output_image: output_content: {len(output_content)} bytes")
     if not output_content:
+        logger.warning("Output image not found", extra={"task_id": task_id, "upload_filename": filename, "user_id": current_user.id})
         raise HTTPException(status_code=404, detail="Output image not found")
     
     return Response(content=output_content, media_type="image/png")
-
-

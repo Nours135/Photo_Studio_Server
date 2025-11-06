@@ -48,7 +48,7 @@ class BackgroundRemovalModel(BaseModel):
         else:
             raise ValueError(f"Invalid environment: {self.config['ENV']}")
 
-        logger.info(f"task_id: {task.task_id}, BackgroundRemovalModel: task_path: {task_path}")
+        logger.info(f"Doing inference", extra={"task_id": task.task_id, 'task_type': 'BackgroundRemoval', 'file_path': task_path})
         # import pdb; pdb.set_trace()
         input_image_path = self.storage_service.get_local_file_path(task_path)
         input_image = io.imread(input_image_path)
@@ -71,7 +71,8 @@ class BackgroundRemovalModel(BaseModel):
         pred = normPRED(pred)
 
         # postprocess the output
-        logger.info(f'task_id: {task.task_id}, BackgroundRemovalModel: saving output...')
+        logger.info('Finish inference', extra={"task_id": task.task_id, 'task_type': 'BackgroundRemoval', 'file_path': task_path})
+        
         output_id = LocalStorage.get_output_id(task_path)  # Use static method
         output_image_path = self.storage_service.get_local_file_path(output_id)
         
@@ -85,10 +86,10 @@ class BackgroundRemovalModel(BaseModel):
             return
         
         if(self._model_name=='u2net'):
-            logger.info("...load U2NET---173.6 MB")
+            logger.info("BackgroundRemoval ...load U2NET---173.6 MB")
             net = U2NET(3,1)
         elif(self._model_name=='u2netp'):
-            logger.info("...load U2NEP---4.7 MB")
+            logger.info("BackgroundRemoval ...load U2NEP---4.7 MB")
             net = U2NETP(3,1)
 
         if self._use_cuda():

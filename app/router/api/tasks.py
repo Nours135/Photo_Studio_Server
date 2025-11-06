@@ -43,7 +43,8 @@ async def create_task(
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
-    logger.info(f"TEST: create_task: file: {file.filename}")
+    
+    
 
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in ALLOWED_EXTENSIONS:
@@ -57,6 +58,7 @@ async def create_task(
         content = await file.read()
         
         if len(content) > MAX_FILE_SIZE:
+            logger.warning('file too large', extra={'file': file.filename, 'task_type': task_type, 'current_user': current_user.id, })
             raise HTTPException(
                 status_code=400, 
                 detail=f"File too large. Max size: {MAX_FILE_SIZE // (1024*1024)}MB"
@@ -65,9 +67,6 @@ async def create_task(
         file_id = f"{str(uuid.uuid4())}{file_ext}"
         
         await storage_service.save(file_id, content)
-        
-        logger.info(f"File uploaded: {file_id} by user {current_user.email}")
-        
         
         if parameters:
             try:
@@ -79,6 +78,9 @@ async def create_task(
         # step 2: store file in S3
 
         task_id = uuid.uuid4()
+        
+        logger.info(f"Task Created and file uploaded.", extra={'file': file.filename, 'task_type': task_type, 'current_user': current_user.id, 'task_parameters': parameters, 'file_id': file_id, 'task_id': str(task_id)})
+        
         # step 3: enqueue task to Redis queue
         task_payload = QueueTaskPayload(
             task_id=task_id,
@@ -103,13 +105,10 @@ async def create_task(
             task=task_in, 
             model_version="v1.0"
         )
-        logger.info(f"Task created: {task.id} for user {current_user.email}")
         return task
         
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Task creation failed: {str(e)}", exc_info=True)
+        logger.error(f"Task creation failed", exc_info=True, stack_info=True)
         raise HTTPException(status_code=500, detail="Task creation failed")
 
 
@@ -120,16 +119,16 @@ async def get_tasks_by_user(
     db: Session = Depends(get_db),
 ):
     try:
-        logger.info(f"get_tasks_by_user: user_id: {current_user.id}")
         tasks = task_crud.get_tasks_by_user(db, user_id=current_user.id)
         if tasks is None or len(tasks) == 0:
+            logger.warning('No tasks found', extra={'user_id': current_user.id})
             raise HTTPException(status_code=404, detail="No tasks found")
-        logger.info(f"get_tasks_by_user: user_id: {current_user.id}, task count: {len(tasks)}")
+        logger.info(f"get_tasks_by_user", extra={'user_id': current_user.id, 'task_count': len(tasks)})
         return tasks
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"get_tasks_by_user failed: {str(e)}", exc_info=True)
+        logger.error(f"get_tasks_by_user failed", extra={'user_id': current_user.id}, exc_info=True, stack_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -144,6 +143,10 @@ async def get_task(
 ):
     task = task_crud.get_task(db, task_id)
     if task is None or task.user_id != current_user.id:
+        if task is not None:
+            logger.warning('User access denied', extra={'task_id': task_id, 'user_id': current_user.id, 'task_owner_id': task.user_id})
+        else:
+            logger.warning('Task not found', extra={'task_id': task_id})
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
@@ -187,7 +190,7 @@ async def stream_task_status(
                 'output_ready': False,
                 'output_url': None,
             }
-            logger.info(f"task_id: {str(task_id)}, stream_task_status: initial_data: {initial_data}")
+            logger.info(f"Initial stream_task_status sent", extra={'task_id': str(task_id)})
             yield f"data: {json.dumps(initial_data)}\n\n"
             
             # Listen for updates
@@ -211,7 +214,7 @@ async def stream_task_status(
                         response_data['status'] = 'FAILED'
 
 
-                    logger.info(f"task_id: {str(task_id)}, recieve redis pub/sub message, stream_task_status: message from redis: {message}. response_data: {response_data}")
+                    logger.info("stream_task_status update", extra={'task_id': str(task_id), 'redis_msg': message, 'response_data': response_data})
                     yield f"data: {json.dumps(response_data)}\n\n"
 
                     if response_data.get('status') in ['COMPLETED', 'FAILED']:
@@ -219,7 +222,7 @@ async def stream_task_status(
                         break
 
         except Exception as e:
-            logger.error(f"SSE stream error for task {task_id}: {str(e)}", exc_info=True)
+            logger.error(f"SSE stream error for task {task_id}: {str(e)}", exc_info=True, stack_info=True)
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
     
     return StreamingResponse(

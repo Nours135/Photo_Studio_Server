@@ -21,11 +21,11 @@ logger = get_logger(__name__)
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED, dependencies=[get_strict_rate_limiter()])
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    logger.info(f"Registration attempt for email: {user_in.email}")
+    logger.info(f"Registration attempt", extra={'email': user_in.email})
     
     existing_user = user_crud.get_user_by_email(db, user_in.email)
     if existing_user:
-        logger.warning(f"Email already registered: {user_in.email}")
+        logger.warning(f"Email already registered", extra={'email': user_in.email})
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
@@ -33,7 +33,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     
     password_hash = get_password_hash(user_in.password)
     user = user_crud.create_user(db, user_in, password_hash)
-    logger.info(f"User successfully created: {user.email} (ID: {user.id})")
+    logger.info(f"User successfully created", extra={'email': user_in.email, 'ID': user.id})
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -46,11 +46,11 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse, dependencies=[get_strict_rate_limiter()])
 def login(user_login: UserLogin, db: Session = Depends(get_db)):
-    logger.info(f"Login attempt for email: {user_login.email}")
+    logger.info(f"Login attempt", extra={'email': user_login.email})
     
     user = user_crud.get_user_by_email(db, user_login.email)
     if not user:
-        logger.warning(f"Login failed: user not found for email {user_login.email}")
+        logger.warning(f"Login failed: user not found", extra={'email': user_login.email})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -58,7 +58,7 @@ def login(user_login: UserLogin, db: Session = Depends(get_db)):
         )
     
     if not verify_password(user_login.password, user.password_hash):
-        logger.warning(f"Login failed: incorrect password for email {user_login.email}")
+        logger.warning(f"Login failed: incorrect password for email", extra={'email': user_login.email})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -73,7 +73,7 @@ def login(user_login: UserLogin, db: Session = Depends(get_db)):
         expires_delta=access_token_expires
     )
     
-    logger.info(f"Login successful for user: {user.email} (ID: {user.id})")
+    logger.info(f"Login successful", extra={'email': user_in.email, 'ID': user.id})
     return TokenResponse(access_token=access_token)
 
 
